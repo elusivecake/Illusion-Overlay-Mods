@@ -95,7 +95,7 @@ namespace KoiSkinOverlayX
             }
 
             if (needsUpdate || OverlayStorage.GetCount() > 0)
-                UpdateTexture(TexType.Unknown);
+                UpdateTexture(TexType2.Unknown);
         }
 
         private void ReadLegacyData(PluginData data)
@@ -103,23 +103,24 @@ namespace KoiSkinOverlayX
             if (TryImportCOBOC()) return;
 
             KoiSkinOverlayMgr.Logger.LogInfo("Reading legacy overlay data");
-            foreach (TexType texType in Enum.GetValues(typeof(TexType)))
+            foreach (TexType2 texType in Enum.GetValues(typeof(TexType2)))
             {
-                if (texType == TexType.Unknown) continue;
+                if (texType == TexType2.Unknown) continue;
 
                 if (data != null
                     && data.data.TryGetValue(texType.ToString(), out var texData)
                     && texData is byte[] bytes && bytes.Length > 0)
                 {
-                    if (texType == TexType.EyeOver)
+					// Treat EyeOver and EyeUnder as though they apply to both left and right eyes
+					if (texType == TexType2.EyeOver)
                     {
-                        OverlayStorage.SetTexture(TexType.EyeOverL, bytes);
-                        OverlayStorage.SetTexture(TexType.EyeOverR, bytes);
+                        OverlayStorage.SetTexture(TexType2.EyeOverL, bytes);
+                        OverlayStorage.SetTexture(TexType2.EyeOverR, bytes);
                     }
-                    else if (texType == TexType.EyeUnder)
+                    else if (texType == TexType2.EyeUnder)
                     {
-                        OverlayStorage.SetTexture(TexType.EyeUnderL, bytes);
-                        OverlayStorage.SetTexture(TexType.EyeUnderR, bytes);
+                        OverlayStorage.SetTexture(TexType2.EyeUnderL, bytes);
+                        OverlayStorage.SetTexture(TexType2.EyeUnderR, bytes);
                     }
                     else
                     {
@@ -168,15 +169,15 @@ namespace KoiSkinOverlayX
             }
             else
             {
-                var overlays = new Dictionary<ChaFileDefine.CoordinateType, Dictionary<TexType, byte[]>>();
+                var overlays = new Dictionary<ChaFileDefine.CoordinateType, Dictionary<TexType2, byte[]>>();
                 var resourceList = ToDictionary<int, byte[]>(tmpResources).Select(x => x.Value).ToList();
-                Dictionary<TexType, byte[]> firstCoord = null;
+                Dictionary<TexType2, byte[]> firstCoord = null;
                 foreach (var kvp in ToDictionary<ChaFileDefine.CoordinateType, object>(tmpOverlayTable))
                 {
-                    var coordinate = new Dictionary<TexType, byte[]>();
+                    var coordinate = new Dictionary<TexType2, byte[]>();
                     foreach (var kvp2 in ToDictionary<TexType, int>(kvp.Value))
                     {
-                        coordinate.Add(kvp2.Key, resourceList[kvp2.Value]);
+                        coordinate.Add(kvp2.Key.ToTexType2(), resourceList[kvp2.Value]);
                         if (kvp2.Value != 0) KoiSkinOverlayMgr.Logger.LogDebug($"[Import] Add overlay ->{kvp.Key}: {kvp2.Key}, {kvp2.Value}");
                     }
 
@@ -206,13 +207,13 @@ namespace KoiSkinOverlayX
             return false;
         }
 
-        public void ApplyOverlayToRT(RenderTexture bodyTexture, TexType overlayType)
+        public void ApplyOverlayToRT(RenderTexture bodyTexture, TexType2 overlayType)
         {
             foreach (var overlayTexture in GetOverlayTextures(overlayType))
                 ApplyOverlay(bodyTexture, overlayTexture);
         }
 
-        internal IEnumerable<Texture2D> GetOverlayTextures(TexType overlayType)
+        internal IEnumerable<Texture2D> GetOverlayTextures(TexType2 overlayType)
         {
             if (IsShown(overlayType))
             {
@@ -224,12 +225,12 @@ namespace KoiSkinOverlayX
                 yield return additionalTexture.Texture;
         }
 
-        private bool IsShown(TexType overlayType)
+        private bool IsShown(TexType2 overlayType)
         {
 #if !EC
             if (!KKAPI.Studio.StudioAPI.InsideStudio) return true;
-            return EnableInStudioSkin && overlayType <= TexType.FaceUnder ||
-                   EnableInStudioIris && overlayType > TexType.FaceUnder;
+            return EnableInStudioSkin && overlayType.HasAnyFlag(TexType2.SkinCategory) ||
+                   EnableInStudioIris && overlayType.HasAnyFlag(TexType2.EyeCategory);
 #else
             return true;
 #endif
@@ -241,10 +242,10 @@ namespace KoiSkinOverlayX
                 ApplyOverlay(targetTexture, overlay);
         }
 
-        public Texture2D SetOverlayTex(byte[] overlayTex, TexType overlayType)
+        public Texture2D SetOverlayTex(byte[] overlayTex, TexType2 overlayType)
         {
-            if (overlayType == TexType.EyeOver || overlayType == TexType.EyeUnder)
-            {
+            if ((overlayType & (TexType2.EyeOver | TexType2.EyeUnder)) != 0) // overlayType == TexType.EyeOver || overlayType == TexType.EyeUnder)
+			{
                 SetOverlayTex(overlayTex, overlayType + 2);
                 return SetOverlayTex(overlayTex, overlayType + 4);
             }
@@ -256,7 +257,7 @@ namespace KoiSkinOverlayX
             return OverlayStorage.GetTexture(overlayType);
         }
 
-        public void UpdateTexture(TexType type)
+        public void UpdateTexture(TexType2 type)
         {
             UpdateTexture(ChaControl, type);
         }
@@ -276,7 +277,7 @@ namespace KoiSkinOverlayX
                 AdditionalTextures.Clear();
         }
 
-        public static void UpdateTexture(ChaControl cc, TexType type)
+        public static void UpdateTexture(ChaControl cc, TexType2 type)
         {
             if (cc == null) return;
             if (cc.customTexCtrlBody == null || cc.customTexCtrlFace == null) return;
@@ -286,84 +287,86 @@ namespace KoiSkinOverlayX
             Util.EnableCharaLoadGC = false;
 
 #if KK || KKS || EC
-            switch (type)
-            {
-                case TexType.BodyOver:
-                case TexType.BodyUnder:
-                    cc.AddUpdateCMBodyTexFlags(true, true, true, true, true);
-                    cc.CreateBodyTexture();
-                    break;
-                case TexType.FaceOver:
-                case TexType.FaceUnder:
-                    cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
-                    cc.CreateFaceTexture();
-                    break;
-                case TexType.EyeUnder:
-                case TexType.EyeOver:
-                case TexType.EyeUnderL:
-                case TexType.EyeOverL:
-                case TexType.EyeUnderR:
-                case TexType.EyeOverR:
-                    cc.ChangeSettingEye(true, true, true);
-                    break;
-                case TexType.EyebrowUnder:
-                    cc.ChangeSettingEyebrow();
-                    break;
-                case TexType.EyelineUnder:
-                    cc.ChangeSettingEyelineUp();
-                    break;
-                default:
-                    cc.AddUpdateCMBodyTexFlags(true, true, true, true, true);
-                    cc.CreateBodyTexture();
-                    cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
-                    cc.CreateFaceTexture();
-                    cc.ChangeSettingEye(true, true, true);
-                    cc.ChangeSettingEyebrow();
-                    cc.ChangeSettingEyelineUp();
-                    //cc.ChangeSettingEyelineDown();
-                    break;
-            }
+
+			//TexType2 category = type & TexType2.Categories;
+			if (type.HasFlag(TexType2.Body))
+			{
+				cc.AddUpdateCMBodyTexFlags(true, true, true, true, true);
+				cc.CreateBodyTexture();
+			}
+            else if (type.HasFlag(TexType2.Face))
+			{
+				cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
+				cc.CreateFaceTexture();
+			}
+            else if (type.HasFlag(TexType2.EyebrowUnder))
+			{
+				cc.ChangeSettingEyebrow();
+			}
+            else if (type.HasFlag(TexType2.EyelineUnder))
+			{
+				cc.ChangeSettingEyelineUp();
+			}
+            else if (type.HasFlag(TexType2.Eye))
+			{
+				cc.ChangeSettingEye(true, true, true);
+			}
+            else
+			{
+				cc.AddUpdateCMBodyTexFlags(true, true, true, true, true);
+				cc.CreateBodyTexture();
+				cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
+				cc.CreateFaceTexture();
+				cc.ChangeSettingEye(true, true, true);
+				cc.ChangeSettingEyebrow();
+				cc.ChangeSettingEyelineUp();
+				//cc.ChangeSettingEyelineDown();
+			}
 #elif AI || HS2
-            switch (type)
+
+			if (type.HasFlag(TexType2.Body))
+			{
+				cc.AddUpdateCMBodyTexFlags(true, true, true, true);
+				cc.CreateBodyTexture();
+			}
+			else if (type.HasFlag(TexType2.Face))
+			{
+				cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
+				cc.CreateFaceTexture();
+			}
+			else if (type.HasFlag(TexType2.EyebrowUnder))
+			{
+				cc.ChangeEyebrowKind();
+			}
+			else if (type.HasFlag(TexType2.EyelineUnder))
+			{
+				cc.ChangeEyelashesKind();
+			}
+			else if (type.HasFlag(TexType2.Eye))
             {
-                case TexType.BodyOver:
-                case TexType.BodyUnder:
-                    cc.AddUpdateCMBodyTexFlags(true, true, true, true);
-                    cc.CreateBodyTexture();
-                    break;
-                case TexType.FaceOver:
-                case TexType.FaceUnder:
-                    cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
-                    cc.CreateFaceTexture();
-                    break;
-                case TexType.EyeUnderL:
-                case TexType.EyeOverL:
-                    cc.ChangeEyesKind(0); //todo test sides
-                    break;
-                case TexType.EyeUnderR:
-                case TexType.EyeOverR:
-                    cc.ChangeEyesKind(1);
-                    break;
-                case TexType.EyeUnder:
-                case TexType.EyeOver:
-                    cc.ChangeEyesKind(2);
-                    break;
-                case TexType.EyebrowUnder:
-                    cc.ChangeEyebrowKind();
-                    break;
-                case TexType.EyelineUnder:
-                    cc.ChangeEyelashesKind();
-                    break;
-                default:
-                    cc.AddUpdateCMBodyTexFlags(true, true, true, true);
-                    cc.CreateBodyTexture();
-                    cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
-                    cc.CreateFaceTexture();
-                    cc.ChangeEyesKind(2);
-                    cc.ChangeEyebrowKind();
-                    cc.ChangeEyelashesKind();
-                    break;
-            }
+                switch (type & (TexType2.LeftAndRight))
+                {
+                    case TexType2.LeftAndRight:
+                        cc.ChangeEyesKind(0);
+                        break;
+					case TexType2.Left:
+                        cc.ChangeEyesKind(1);
+                        break;
+					case TexType2.Right:
+                        cc.ChangeEyesKind(2);
+                        break;
+				}
+			}
+			else
+			{
+				cc.AddUpdateCMBodyTexFlags(true, true, true, true);
+				cc.CreateBodyTexture();
+				cc.AddUpdateCMFaceTexFlags(true, true, true, true, true, true, true);
+				cc.CreateFaceTexture();
+				cc.ChangeEyesKind(2);
+				cc.ChangeEyebrowKind();
+				cc.ChangeEyelashesKind();
+			}
 #endif
 
             Util.EnableCharaLoadGC = prevGcClear;
@@ -395,64 +398,23 @@ namespace KoiSkinOverlayX
         /// <summary>
         /// For use with UpdateTexture, returns the most restrictive (fastest) update type that will cover all overlays
         /// </summary>
-        private TexType WhatTexturesNeedUpdating()
+        private TexType2 WhatTexturesNeedUpdating()
         {
-            var lastStatus = TexType.Unknown;
+            var lastStatus = TexType2.Unknown;
             foreach (var texType in OverlayStorage.GetAllTypes())
             {
-                if (lastStatus != TexType.Unknown)
+                if (lastStatus != TexType2.Unknown)
                 {
-                    switch (texType)
-                    {
-                        case TexType.BodyOver:
-                        case TexType.BodyUnder:
-                            if (lastStatus != TexType.BodyUnder && lastStatus != TexType.BodyOver)
-                            {
-                                lastStatus = TexType.Unknown;
-                                goto ExitLoop;
-                            }
-                            break;
-                        case TexType.FaceOver:
-                        case TexType.FaceUnder:
-                            if (lastStatus != TexType.FaceUnder && lastStatus != TexType.FaceOver)
-                            {
-                                lastStatus = TexType.Unknown;
-                                goto ExitLoop;
-                            }
-                            break;
-                        case TexType.EyeUnder:
-                        case TexType.EyeOver:
-                        case TexType.EyeUnderL:
-                        case TexType.EyeOverL:
-                        case TexType.EyeUnderR:
-                        case TexType.EyeOverR:
-                            if (lastStatus < TexType.EyeUnder || lastStatus > TexType.EyeOverR)
-                            {
-                                lastStatus = TexType.Unknown;
-                                goto ExitLoop;
-                            }
-                            break;
-                        case TexType.EyebrowUnder:
-                            if (lastStatus != TexType.EyebrowUnder)
-                            {
-                                lastStatus = TexType.Unknown;
-                                goto ExitLoop;
-                            }
-                            break;
-                        case TexType.EyelineUnder: //todo kk shadow overlay goes here if ever added
-                            if (lastStatus != TexType.EyelineUnder)
-                            {
-                                lastStatus = TexType.Unknown;
-                                goto ExitLoop;
-                            }
-                            break;
-                    }
+					TexType2 category = texType & TexType2.Categories;
+					if (category == TexType2.Unknown || !lastStatus.HasFlag(category))
+					{
+						return TexType2.Unknown;
+					}
                 }
 
                 lastStatus = texType;
             }
 
-        ExitLoop:
             return lastStatus;
         }
     }

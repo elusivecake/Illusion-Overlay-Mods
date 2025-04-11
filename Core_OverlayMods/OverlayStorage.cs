@@ -30,16 +30,16 @@ namespace KoiSkinOverlayX
 
         private readonly TextureStorage _textureStorage;
         private readonly ChaControl _chaControl;
-        private Dictionary<CoordinateType, Dictionary<TexType, int>> _allOverlayTextures;
+        private Dictionary<CoordinateType, Dictionary<TexType2, int>> _allOverlayTextures;
 
         public OverlayStorage(CharaCustomFunctionController controller)
         {
             _chaControl = controller.ChaControl;
             _textureStorage = new TextureStorage();
-            _allOverlayTextures = new Dictionary<CoordinateType, Dictionary<TexType, int>>();
+            _allOverlayTextures = new Dictionary<CoordinateType, Dictionary<TexType2, int>>();
         }
 
-        private Dictionary<TexType, int> GetCurrentOverlayTextures()
+        private Dictionary<TexType2, int> GetCurrentOverlayTextures()
         {
 #if KK || KKS
             // Need to do this instead of polling the CurrentCoordinate prop because it's updated too late
@@ -52,7 +52,7 @@ namespace KoiSkinOverlayX
             return GetOverlayTextures(coordinateType);
         }
 
-        private Dictionary<TexType, int> GetOverlayTextures(CoordinateType coordinateType)
+        private Dictionary<TexType2, int> GetOverlayTextures(CoordinateType coordinateType)
         {
             _allOverlayTextures.TryGetValue(coordinateType, out var dict);
 
@@ -60,10 +60,10 @@ namespace KoiSkinOverlayX
             {
 #if KK || KKS
                 if (!IsPerCoord() && _allOverlayTextures.Count > 0)
-                    dict = new Dictionary<TexType, int>(_allOverlayTextures.First().Value);
+                    dict = new Dictionary<TexType2, int>(_allOverlayTextures.First().Value);
                 else
 #endif
-                    dict = new Dictionary<TexType, int>();
+                    dict = new Dictionary<TexType2, int>();
                 _allOverlayTextures.Add(coordinateType, dict);
             }
 
@@ -71,7 +71,7 @@ namespace KoiSkinOverlayX
         }
 
         //CoordinateType coordinateType
-        public Texture2D GetTexture(TexType type)
+        public Texture2D GetTexture(TexType2 type)
         {
             var texs = GetCurrentOverlayTextures();
             if (texs.TryGetValue(type, out var id))
@@ -80,7 +80,7 @@ namespace KoiSkinOverlayX
             return null;
         }
 
-        public void SetTexture(TexType type, byte[] pngData)
+        public void SetTexture(TexType2 type, byte[] pngData)
         {
             var texs = GetCurrentOverlayTextures();
             if (pngData == null)
@@ -99,7 +99,7 @@ namespace KoiSkinOverlayX
             return onlyCurrentCoord ? GetCurrentOverlayTextures().Count : _allOverlayTextures.Sum(x => x.Value.Count);
         }
 
-        internal IEnumerable<TexType> GetAllTypes()
+        internal IEnumerable<TexType2> GetAllTypes()
         {
             return _allOverlayTextures.SelectMany(x => x.Value.Keys);
         }
@@ -118,7 +118,7 @@ namespace KoiSkinOverlayX
             {
                 try
                 {
-                    _allOverlayTextures = MessagePackSerializer.Deserialize<Dictionary<CoordinateType, Dictionary<TexType, int>>>(lookuparr);
+                    _allOverlayTextures = MessagePackSerializer.Deserialize<Dictionary<CoordinateType, Dictionary<TexType2, int>>>(lookuparr);
                     _textureStorage.Load(data);
                     return;
                 }
@@ -136,7 +136,7 @@ namespace KoiSkinOverlayX
             Clear();
         }
 
-        public void Load(Dictionary<CoordinateType, Dictionary<TexType, byte[]>> overlays)
+        public void Load(Dictionary<CoordinateType, Dictionary<TexType2, byte[]>> overlays)
         {
             Clear();
 
@@ -197,7 +197,7 @@ namespace KoiSkinOverlayX
 #if KK || KKS
         public bool IsPerCoord()
         {
-            Dictionary<TexType, int> first = null;
+            Dictionary<TexType2, int> first = null;
             foreach (var dic in _allOverlayTextures)
             {
                 if (first == null)
@@ -231,8 +231,8 @@ namespace KoiSkinOverlayX
             pluginData.data.TryGetValue(OverlayDataKey, out var lookup);
             if (lookup is byte[] lookuparr)
             {
-                var dic = MessagePackSerializer.Deserialize<Dictionary<CoordinateType, Dictionary<TexType, int>>>(lookuparr);
-                var outDic = new Dictionary<CoordinateType, Dictionary<TexType, int>>(dic.Count);
+                var dic = MessagePackSerializer.Deserialize<Dictionary<CoordinateType, Dictionary<TexType2, int>>>(lookuparr);
+                var outDic = new Dictionary<CoordinateType, Dictionary<TexType2, int>>(dic.Count);
 
                 foreach (var map in mapping)
                 {

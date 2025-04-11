@@ -15,7 +15,7 @@ namespace KoiSkinOverlayX
         /// <param name="texture">Overlay texture</param>
         /// <param name="overlayType">What part to apply the overlay to</param>
         /// <param name="tag">Tag for self use</param>
-        public AdditionalTexture(Texture2D texture, TexType overlayType, object tag)
+        public AdditionalTexture(Texture2D texture, TexType2 overlayType, object tag)
         {
             Texture = texture;
             Tag = tag;
@@ -29,7 +29,7 @@ namespace KoiSkinOverlayX
         /// <param name="overlayType">What part to apply the overlay to</param>
         /// <param name="tag">Tag for self use</param>
         /// <param name="applyOrder">Order in which the overlay isapplied relative to other additional overlay textures. Lower number is applied earlier. Default is 0.</param>
-        public AdditionalTexture(Texture2D texture, TexType overlayType, object tag, int applyOrder)
+        public AdditionalTexture(Texture2D texture, TexType2 overlayType, object tag, int applyOrder)
         {
             Texture = texture;
             Tag = tag;
@@ -39,7 +39,7 @@ namespace KoiSkinOverlayX
 
         public Texture2D Texture { get; }
         public object Tag { get; }
-        public TexType OverlayType { get; }
+        public TexType2 OverlayType { get; }
         public int ApplyOrder { get; }
     }
 }
